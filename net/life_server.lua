@@ -84,16 +84,18 @@ local worker = function(socket)
     end
 
 
-    -- output the array to screen
+   -- output the array to screen
     function _CELLS:draw()
 
       for y=1,self.h do
+       local line=""
        for x=1,self.w do
-          write(((self[y][x]>0) and ALIVE) or DEAD)
+          line=line .. (((self[y][x]>0) and ALIVE) or DEAD)
         end
-        write("\r\n")
+        write(line,"\r\n")
       end
     end
+
 
     -- constructor
     function CELLS(w,h)
