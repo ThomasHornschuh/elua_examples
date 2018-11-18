@@ -86,15 +86,18 @@ local worker = function(socket)
 
    -- output the array to screen
     function _CELLS:draw()
-
+      local ALIVE="O"
+      local DEAD="-"
+      local line={}
+      line[self.w]="" -- preallocate to tune performance
       for y=1,self.h do
-       local line=""
        for x=1,self.w do
-          line=line .. (((self[y][x]>0) and ALIVE) or DEAD)
+         line[x]=(((self[y][x]>0) and ALIVE) or DEAD)
         end
-        write(line,"\r\n")
+        write(table.concat(line),"\r\n")
       end
     end
+
 
 
     -- constructor
@@ -229,4 +232,3 @@ end
 
 dispatcher()
 net.unlisten(5050)
-

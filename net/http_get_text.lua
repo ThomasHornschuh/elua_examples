@@ -20,10 +20,9 @@ Accept-Language: en-US,en;q=0.8,de;q=0.6
 
 
 
-function get_headers(resp)
-local headers={}
-
-local headertext=string.match(resp,"^(.-)<!DOCTYPE")
+local function get_headers(resp)
+  local headers={}
+  local headertext=string.match(resp,"^(.-)<!DOCTYPE")
 
   if not headertext then
     headertext=string.match(resp,"^(.-)<[Hh][Tt][Mm][Ll]>")
@@ -43,14 +42,14 @@ local headertext=string.match(resp,"^(.-)<!DOCTYPE")
 end
 
 
-function get_body(resp)
+local function get_body(resp)
 
   return string.match(resp,"<[Hh][Tt][Mm][Ll].->.*</[Hh][Tt][Mm][Ll]>")
 
 end
 
 
-function get_length(s)
+local function get_length(s)
 local t=type(s)
 
   if t=="string" or t=="table" then
@@ -62,7 +61,7 @@ end
 
 local tag_pattern="</?(%a+.-)/?>"
 
-function count_tags(content)
+local function count_tags(content)
 local count=0
 
   for t in content:gmatch(tag_pattern) do
@@ -72,7 +71,7 @@ local count=0
 end
 
 
-function more(content,pagesize)
+local function more(content,pagesize)
 
 local temp,l,n
 
@@ -127,10 +126,11 @@ local temp,l,n
   until c=="q" or c=="Q"
 end
 
-function main()
+local function main()
 
 local timeout=10*10^6
 local body
+local hostip
 
   repeat
     io.write("\nEnter URL without 'http(s)://' (leave blank to terminate): ")
@@ -144,8 +144,15 @@ local body
     end
     print(string.format("Host=%s Path=%s Port=%s",host,path,port or ""))
 
-    local hostip=net.lookup(host)
 
+    hostip=nil
+    if not pcall(function() hostip=net.packip(host) end ) then
+      hostip=net.lookup(host)
+    end
+
+    if not hostip then
+      print(string.format("Host %s is neither an IP address nor can resolved",host))
+    end
 
     local s=net.socket(0)
     local timer=tmr.read()
