@@ -4,24 +4,27 @@
 -- modified to use ANSI terminal escape sequences
 -- modified to use for instead of while
 -- TH: Wrapped a TCP Server around it.
-dbg=require("debugger")
+--local dbg=require("debugger")
 
-require "util"
 
-local worker = function(socket)
+
+local M={}
+
+
+function M.worker(socket)
 
 
     local outbuff={}
 
-    local write=function(...)
+    local function write(...)
 
-       for i,v in ipairs(arg) do
+       for i,v in ipairs({...}) do
          outbuff[#outbuff+1]=tostring(v)
        end
     end
 
 
-    local flush=function()
+    local function flush()
        local sendbuff=table.concat(outbuff)
        local t=tmr.read()
        --dbg()
@@ -40,12 +43,11 @@ local worker = function(socket)
        return true
     end
 
-    ALIVE="O"       DEAD="-"
-
-    function delay() -- NOTE: SYSTEM-DEPENDENT, adjust as necessary
+ 
+    local function delay() -- NOTE: SYSTEM-DEPENDENT, adjust as necessary
     end
 
-    function ARRAY2D(w,h)
+    local function ARRAY2D(w,h)
       local t = {w=w,h=h}
       for y=1,h do
         t[y] = {}
@@ -56,10 +58,10 @@ local worker = function(socket)
       return t
     end
 
-    _CELLS = {}
+    local CELLS = {}
 
     -- give birth to a "shape" within the cell array
-    function _CELLS:spawn(shape,left,top)
+    function CELLS:spawn(shape,left,top)
       for y=0,shape.h-1 do
         for x=0,shape.w-1 do
           self[top+y][left+x] = shape[y*shape.w+x+1]
@@ -68,7 +70,7 @@ local worker = function(socket)
     end
 
     -- run the CA and produce the next generation
-    function _CELLS:evolve(next)
+    function CELLS:evolve(next)
       local ym1,y,yp1,yi=self.h-1,self.h,1,self.h
       while yi > 0 do
         local xm1,x,xp1,xi=self.w-1,self.w,1,self.w
@@ -85,7 +87,7 @@ local worker = function(socket)
 
 
    -- output the array to screen
-    function _CELLS:draw()
+    function CELLS:draw()
       local ALIVE="O"
       local DEAD="-"
       local line={}
@@ -98,31 +100,29 @@ local worker = function(socket)
       end
     end
 
-
+    CELLS.__index=CELLS 
 
     -- constructor
-    function CELLS(w,h)
+    function CELLS:CELLS(w,h)
       local c = ARRAY2D(w,h)
-      c.spawn = _CELLS.spawn
-      c.evolve = _CELLS.evolve
-      c.draw = _CELLS.draw
+      setmetatable(c,self)
       return c
     end
 
     --
     -- shapes suitable for use with spawn() above
     --
-    HEART = { 1,0,1,1,0,1,1,1,1; w=3,h=3 }
-    GLIDER = { 0,0,1,1,0,1,0,1,1; w=3,h=3 }
-    EXPLODE = { 0,1,0,1,1,1,1,0,1,0,1,0; w=3,h=4 }
-    FISH = { 0,1,1,1,1,1,0,0,0,1,0,0,0,0,1,1,0,0,1,0; w=5,h=4 }
-    BUTTERFLY = { 1,0,0,0,1,0,1,1,1,0,1,0,0,0,1,1,0,1,0,1,1,0,0,0,1; w=5,h=5 }
+    local HEART = { 1,0,1,1,0,1,1,1,1; w=3,h=3 }
+    local GLIDER = { 0,0,1,1,0,1,0,1,1; w=3,h=3 }
+    local EXPLODE = { 0,1,0,1,1,1,1,0,1,0,1,0; w=3,h=4 }
+    local FISH = { 0,1,1,1,1,1,0,0,0,1,0,0,0,0,1,1,0,0,1,0; w=5,h=4 }
+    local BUTTERFLY = { 1,0,0,0,1,0,1,1,1,0,1,0,0,0,1,1,0,1,0,1,1,0,0,0,1; w=5,h=5 }
 
     -- the main routine
-    function LIFE(w,h,supress_out)
+    local function LIFE(w,h,supress_out)
       -- create two arrays
-      local thisgen = CELLS(w,h)
-      local nextgen = CELLS(w,h)
+      local thisgen = CELLS:CELLS(w,h)
+      local nextgen = CELLS:CELLS(w,h)
       local s_time
       if tmr~=nil then
         s_time=tmr.read()
@@ -186,18 +186,18 @@ end -- worker
 
 
 
-function dispatcher()
+function M.dispatcher()
 --local k,c
 local ptable
 
 
-  function listen()
+  local function listen()
     local w
     while true do
       local sock,ip,err=net.accept(5050,nil,0)
       if err==0 and sock>=0 then
         print(sock,net.unpackip(ip,"*s"))
-        w=coroutine.create(worker)
+        w=coroutine.create(M.worker)
         ptable[sock]=w
         --dbg()
       end
@@ -227,8 +227,15 @@ local ptable
         return
       end
   end
+  net.unlisten(5050)
 end
 
+-- Check for innovation over the command line
+if arg and arg[-1]=="lua" then
+  M.dispatcher()
+end
 
-dispatcher()
-net.unlisten(5050)
+return M
+
+
+
