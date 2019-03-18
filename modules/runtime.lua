@@ -47,4 +47,10 @@ function M.time(path)
 
 end
 
-return M
+if arg and arg[1] then
+  print(string.format("Loading and measuring %s",arg[1]))
+  M.time(arg[1])
+else  
+  return M
+end
+  
