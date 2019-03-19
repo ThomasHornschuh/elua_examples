@@ -22,7 +22,7 @@ local request_tmpl=table.concat(
   }, "\r\n")
 
 
-local function sanitize_url(url)
+function M.sanitize_url(url)
 
   if url:match("[%s%c]") then
      error "url contains spaces or ctrl chars"
@@ -33,9 +33,18 @@ local function sanitize_url(url)
     proto="http"
   end   
 
-  local host,port,path=tail:match('([%a%d-.]+):?(%d*)/?([%w%p%?]*)')  
+  local host,colon,port, path_sep,path=tail:match('(^[%a%d-.]+)(:?)(%d*)(/?)([%w%p%?]*)')
+  if colon==":" and #port==0 then
+    error "url format: colon without port number"
+  end
+  if #path>0 and  #path_sep==0 then
+    error "url format: missing /"
+  end
+  if not host then 
+    error "url format: no host"
+  end    
   
-  print(string.format("Host=%s Path=%s Port=%s",host,path,port or ""))
+  print(string.format("Host=%s Path=%s Port=%s",host,path or "",port or ""))
 
   return {
      proto=proto, 
@@ -122,7 +131,7 @@ local function stream_process(chunk,finish)
          ctype=""
         end 
         pcall( function() 
-                 total_length= headers["content-length"]+bodyindex+1
+                 total_length= headers["content-length"]+bodyindex-1
                  print("total: ",total_length)
                 end )          
 
@@ -198,17 +207,18 @@ local function receive(s,req)
 
   local t=tmr.read()
   local stream_thread=coroutine.create(stream_process)
-  
+  local dtime=tmr.read() -- Dispatch time
+
+  -- Main loop
   while not finish do    
     net.tick()
     if tmr.getdiffnow(nil,tstart)>timeout then
       err=net.ERR_WAIT_TIMEDOUT
       finish=true
     end
-   if #res>0 or finish then 
-     
-      local s,headers,response_code,content,_fin=coroutine.resume(stream_thread,table.concat(res),finish)
-      if not s then 
+    if (#res>0 and tmr.getdiffnow(nil,dtime)>100000) or finish then 
+      local success,headers,response_code,content,_fin=coroutine.resume(stream_thread,table.concat(res),finish)
+      if not success then 
         error(headers)
       else 
         if _fin then 
@@ -228,7 +238,7 @@ end
 
 function M.request(url)
 
-   local u=sanitize_url(url)
+   local u=M.sanitize_url(url)
    local hostip
 
    if not pcall(function() hostip=net.packip(u.host) end) then
@@ -240,6 +250,7 @@ function M.request(url)
    end
 
    local s=net.socket(0)
+   s:setoption(net.OPT_RCVBUF,32768)
    if s:connect(hostip,tonumber(u.port) or 80)~=net.ERR_OK then
       error(string.format("Cannot connect to host %s port %s",u.host,u.port))
    end 
