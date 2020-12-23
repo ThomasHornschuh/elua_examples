@@ -438,20 +438,20 @@ local sip = net.local_ip()
   cxt.dataSocket = dataSocket
   dataSocket:setoption(net.OPT_SNDBUF,bufSize*2)
 
-  local case = {}
-  function case.write()
-    cxt.sender()
-  end
-  function case.read()
-  end
-  function case.fin()
-    cxt.debug("dataSocket %s closed",tostring(dataSocket))
-    cxt.dataSocket=nil
-  end
-
-
-
+  
   dataSocket:callback(function(event)
+    local case = {
+
+      write = function()
+       cxt.sender()
+      end,
+      read = function() end,
+      fin = function()
+        cxt.debug("dataSocket %s closed",tostring(dataSocket))
+        cxt.dataSocket=nil
+      end
+    }
+
     local f=case[event]
     if f then
       dbg.call(f)
@@ -460,7 +460,7 @@ local sip = net.local_ip()
       cxt.debug("%s event on %s",event,tostring(dataSocket))
     end
   end)
-
+  cxt.debug("closing dataserver %s",tostring(cxt.dataServer))
   cxt.dataServer:close()
   cxt.dataServer = nil
 
@@ -528,7 +528,7 @@ local sip = net.local_ip()
           while true do
             local sent=skt:send(rec)
             size=size+sent
-            cxt.debug("sent %d bytes",sent)
+            --cxt.debug("sent %d bytes",sent)
             if sent==#rec then
               break
             elseif sent>0 then
