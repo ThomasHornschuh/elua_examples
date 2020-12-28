@@ -35,7 +35,7 @@ local bufSize=8192
 local dbg=require "debugger"
 
 local function dbg_print(...)
-  args = {...}
+  local args = {...}
   xpcall(function()
            print(string.format(unpack(args)))
          end,
@@ -374,7 +374,9 @@ local cxt, cmd, arg = ...
 
   elseif cmd == "STOR" then
     local f = io.open(arg, "w")
+   
     if f then -- define a setter to write the file
+      cxt.debug("opened file %s",arg)
       function cxt.setData(c, rec) -- luacheck: ignore c -- upval: f (, arg)
         cxt.debug("writing %u bytes to %s", #rec, arg)
         return f:write(rec)
@@ -445,9 +447,18 @@ local sip = net.local_ip()
       write = function()
        cxt.sender()
       end,
-      read = function() end,
+      read = function() 
+        r = dataSocket:recv(bufSize)
+        if #r>0 and cxt.setData then
+          cxt:setData(r)
+        end  
+
+      end,
+      close = function()
+        cxt:cleardown(dataSocket,1)
+      end,  
       fin = function()
-        cxt.debug("dataSocket %s closed",tostring(dataSocket))
+        cxt.debug("dataSocket %s fin event",tostring(dataSocket))
         cxt.dataSocket=nil
       end
     }
@@ -464,8 +475,8 @@ local sip = net.local_ip()
   cxt.dataServer:close()
   cxt.dataServer = nil
 
-  function cxt.cleardown(cxt, skt, cdtype)  --luacheck: ignore cxt -- shadowing
-    -- luacheck: ignore cdtype which
+  function cxt.cleardown(cxt, skt, cdtype) 
+   
     cdtype = cdtype==1 and "disconnection" or "reconnection"
     local which = cxt.setData and "setData" or (cxt.getData and cxt.getData or "neither")
     cxt.debug("Cleardown entered from %s with %s", cdtype, which)
@@ -477,10 +488,7 @@ local sip = net.local_ip()
       cxt.getData, cxt.sender = nil, nil
     end
     cxt.debug("Clearing down data socket %s", tostring(skt))
-    -- node.task.post(function() -- upval: cxt, skt
-    --     pcall(skt.close, skt); skt=nil
-    --     cxt.dataSocket = nil
-    --   end)
+   
   end
 
 
