@@ -4,16 +4,18 @@
 -- modified to use ANSI terminal escape sequences
 -- modified to use for instead of while
 -- TH: Wrapped a TCP Server around it.
---local dbg=require("debugger")
 
-
+local dbg = package.loaded.debugger or function() end
 
 local M={}
 
+local tick=net.tick -- Picotcp
 
-function M.worker(socket)
+dbg()
 
+function M.worker(socket,doloop)
 
+    print(doloop)
     local outbuff={}
 
     local function write(...)
@@ -34,16 +36,14 @@ function M.worker(socket)
          print("Net error when send")
          return false
        else
-         --if t>100 then
-           print(string.format("Send to socket %d took %.3f ms",socket,t))
-         --end
+         print(string.format("Send to socket [%s] took %.3f ms",tostring(socket),t))
        end
        outbuff={}
        coroutine.yield()
        return true
     end
 
- 
+
     local function delay() -- NOTE: SYSTEM-DEPENDENT, adjust as necessary
     end
 
@@ -93,14 +93,15 @@ function M.worker(socket)
       local line={}
       line[self.w]="" -- preallocate to tune performance
       for y=1,self.h do
+       --coroutine.yield()
        for x=1,self.w do
          line[x]=(((self[y][x]>0) and ALIVE) or DEAD)
         end
-        write(table.concat(line),"\r\n")
+        write(table.concat(line),"\027[K\r\n")
       end
     end
 
-    CELLS.__index=CELLS 
+    CELLS.__index=CELLS
 
     -- constructor
     function CELLS:CELLS(w,h)
@@ -120,22 +121,28 @@ function M.worker(socket)
 
     -- the main routine
     local function LIFE(w,h,supress_out)
-      -- create two arrays
-      local thisgen = CELLS:CELLS(w,h)
-      local nextgen = CELLS:CELLS(w,h)
+
+      local thisgen
+      local nextgen
       local s_time
+
+      local function init()
+        -- create two arrays
+        thisgen = CELLS:CELLS(w,h)
+        nextgen = CELLS:CELLS(w,h)
+        -- create some life
+        -- about 1000 generations of fun, then a glider steady-state
+        thisgen:spawn(GLIDER,5,4)
+        thisgen:spawn(EXPLODE,25,10)
+        thisgen:spawn(FISH,4,12)
+      end
+
       if tmr~=nil then
         s_time=tmr.read()
       end
 
+      init()
 
-      -- create some life
-      -- about 1000 generations of fun, then a glider steady-state
-      thisgen:spawn(GLIDER,5,4)
-      thisgen:spawn(EXPLODE,25,10)
-      thisgen:spawn(FISH,4,12)
-
-      -- run until break
       local gen=1
       write("\027[2J")      -- ANSI clear screen
 
@@ -155,7 +162,12 @@ function M.worker(socket)
             end
         end
         gen=gen+1
-        if gen>50 then break end
+        if not doloop and gen>50 then break end
+        -- Start over after 250 generations
+        if gen>250 then
+          gen=1
+          init()
+        end
 
       end
 
@@ -178,6 +190,7 @@ function M.worker(socket)
 
 
 
+  print("Worker started, with socket",socket)
   LIFE(32,16,false)
   net.close(socket)
 
@@ -186,36 +199,73 @@ end -- worker
 
 
 
-function M.dispatcher()
+function M.dispatcher(loop)
 --local k,c
-local ptable
+local ptable={}
+local l -- listener Socket
+print(loop)
+  local function isValid(s)
+    if tick then
+      return s
+    else
+      return s>=0
+    end
+  end
 
+  local function new_connection()
+
+    --dbg()
+    local sock,ip,err=net.accept(5050,nil,0)
+    if err==0 and isValid(sock) then
+      print(sock,net.unpackip(ip,"*s"))
+      local w=coroutine.create(M.worker)
+      ptable[sock]=w
+    end
+    return sock
+  end
 
   local function listen()
-    local w
     while true do
-      local sock,ip,err=net.accept(5050,nil,0)
-      if err==0 and sock>=0 then
-        print(sock,net.unpackip(ip,"*s"))
-        w=coroutine.create(M.worker)
-        ptable[sock]=w
-        --dbg()
-      end
+      new_connection()
       coroutine.yield()
     end
   end
 
-  ptable={ listener=coroutine.create(listen) }
 
+  if not tick then
+    print("Using sync listener")
+    net.listen(5050)
+    ptable.listener=coroutine.create(listen)
+  else
+    print("Using callback listener")
+    l=net.listen(5050,
+       function(event)
+
+          if event=="connect" then
+            local s=new_connection()
+            s:callback(function (event)
+               if event=="close" then
+                 dbg()
+                 ptable[s]=nil
+               end
+            end)
+          end
+        end)
+  end
   print("\nWaiting for new connections")
   while true do
+      if tick then tick() end
       for s,c in pairs(ptable) do
         if coroutine.status(c)~="dead" then
-          coroutine.resume(c,s)
+          local f,e=coroutine.resume(c,s,loop)
+          if not f then
+            print("Coroutine error: ", e)
+          end
         else
          -- dbg()
           ptable[s]=nil -- delete terminated threads
         end
+        if tick then tick() end
       end
       if uart.getchar(0,0)~="" then
         print("\nStopping")
@@ -224,18 +274,21 @@ local ptable
             net.close(s)
           end
         end
-        return
+        break
       end
   end
-  net.unlisten(5050)
+  if tick then
+    print("close socket: "..tostring(l))
+    l:close()
+  else
+    net.unlisten(5050)
+  end
 end
 
--- Check for innovation over the command line
-if arg and arg[-1]=="lua" then
-  M.dispatcher()
+-- Check for innvocation over the command line
+if arg and type(arg[0])=="string" then
+  M.dispatcher(arg[1]=="-l")
 end
 
 return M
-
-
 

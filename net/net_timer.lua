@@ -19,11 +19,11 @@ local function run()
     end)
   end
 
-d.pp(debug.getregistry())
+  d.pp(debug.getregistry())
 
-repeat
-  net.tick()
-until stop==numtimers
+  repeat
+    net.tick()
+  until stop==numtimers
 end
 
 run()
