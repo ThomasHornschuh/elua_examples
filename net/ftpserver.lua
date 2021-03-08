@@ -25,7 +25,7 @@
  be optionally loaded lazily, and SPILT comments allow the source to be
  preprocessed for loading as either components in the "fast" Cmodule or as
  LC files in SPIFFS.
-]]
+--]]
 --luacheck: read globals fast file net node tmr uart wifi FAST_ftp SPIFFS_ftp
 
 local FTP, FTPindex = {client = {}}, nil

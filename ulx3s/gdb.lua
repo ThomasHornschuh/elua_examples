@@ -1,7 +1,13 @@
 local g=bonfire.gdbserver
 if g then
   uart.setup(1,115200,8,0,1)
-  local f=assert(io.open("/mmc/ulx3s/server.py","r"))
+  local parts={}
+  for m in arg[0]:gmatch("/([%w%-%_%.]+)") do
+     parts[#parts+1]=m
+  end
+  parts[#parts]=nil -- We dont want the last element (the script name itself)
+  local spath="/"..table.concat(parts,"/").."/server.py"
+  local f=assert(io.open(spath,"r"))
   local scode = f:read("*a")
   f:close()
   print(string.format("Send server.py to ESP32, %d bytes",#scode))
